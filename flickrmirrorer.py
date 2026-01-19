@@ -592,8 +592,8 @@ class FlickrMirrorer(object):
         mediatype = photo['media']
 
         if mediatype == 'photo':
-            # Prepend ID to the original filename to avoid collisions
-            return '%s_%s.%s' % (photo['id'], photo['id'], photo['originalformat'])
+            # Photos use ID.format which is already unique
+            return '%s.%s' % (photo['id'], photo['originalformat'])
 
         if mediatype == 'video':
             # TODO: If Flickr begins including the file extension in the
@@ -602,9 +602,37 @@ class FlickrMirrorer(object):
             # The photo metadata for videos does not indicate the file
             # extension. If we've already saved the video locally then
             # we can get the basename from the local file.
+            
+            # First, check for new format with ID prefix
             for f in glob.iglob(os.path.join(self.photostream_dir, photo['id']) + '_*'):
                 if not f.endswith('metadata'):
                     return os.path.basename(f)
+            
+            # Check for old format without ID prefix (for backward compatibility)
+            # This searches for any file starting with a non-digit character
+            # that might be an old-style video file
+            for f in glob.glob(os.path.join(self.photostream_dir, '*')):
+                basename = os.path.basename(f)
+                # Skip metadata files and photo files (which have ID.format pattern)
+                if basename.endswith('.metadata'):
+                    continue
+                # Check if this could be an old video file by looking for metadata with matching ID
+                metadata_file = f + '.metadata'
+                if os.path.exists(metadata_file):
+                    try:
+                        with open(metadata_file) as json_file:
+                            metadata = json.load(json_file)
+                        if metadata.get('id') == photo['id']:
+                            # Found old-style video file - rename it to new format with ID prefix
+                            new_basename = '%s_%s' % (photo['id'], basename)
+                            new_path = os.path.join(self.photostream_dir, new_basename)
+                            new_metadata_path = new_path + '.metadata'
+                            self._verbose('Renaming %s to %s to add ID prefix' % (basename, new_basename))
+                            os.rename(f, new_path)
+                            os.rename(metadata_file, new_metadata_path)
+                            return new_basename
+                    except (IOError, ValueError, KeyError):
+                        continue
 
             # Otherwise, make an HTTP HEAD request to get the response
             # headers we'd see when trying to download the photo. This
