@@ -592,7 +592,8 @@ class FlickrMirrorer(object):
         mediatype = photo['media']
 
         if mediatype == 'photo':
-            return '%s.%s' % (photo['id'], photo['originalformat'])
+            # Prepend ID to the original filename to avoid collisions
+            return '%s_%s.%s' % (photo['id'], photo['id'], photo['originalformat'])
 
         if mediatype == 'video':
             # TODO: If Flickr begins including the file extension in the
@@ -601,7 +602,7 @@ class FlickrMirrorer(object):
             # The photo metadata for videos does not indicate the file
             # extension. If we've already saved the video locally then
             # we can get the basename from the local file.
-            for f in glob.iglob(os.path.join(self.photostream_dir, photo['id']) + '*'):
+            for f in glob.iglob(os.path.join(self.photostream_dir, photo['id']) + '_*'):
                 if not f.endswith('metadata'):
                     return os.path.basename(f)
 
@@ -623,7 +624,9 @@ class FlickrMirrorer(object):
                     'Manual download required: '
                     'https://www.flickr.com/video_download.gne?id=%s' % photo['id'])
 
-            return os.path.basename(urllib.parse.urlparse(head.url).path)
+            original_basename = os.path.basename(urllib.parse.urlparse(head.url).path)
+            # Prepend ID to the original video filename to avoid collisions
+            return '%s_%s' % (photo['id'], original_basename)
 
         sys.stderr.write('Error: Unsupported media type "%s":\n' % mediatype)
         sys.stderr.write(json.dumps(photo, indent=2) + '\n')
